@@ -1,0 +1,27 @@
+[req]
+distinguished_name = dn
+prompt = no
+
+[dn]
+O = PhantomTV
+CN = www.youtube.com
+
+[v3]
+keyUsage = critical, digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+basicConstraints = critical, CA:FALSE
+subjectAltName = @alt
+
+[alt]
+DNS.1 = www.youtube.com
+DNS.2 = youtube.com
+DNS.3 = *.youtube.com
+DNS.4 = m.youtube.com
+DNS.5 = youtubei.googleapis.com
+DNS.6 = c.youtube.com
+DNS.7 = *.c.youtube.com
+DNS.8 = redirector.googlevideo.com
+DNS.9 = *.googlevideo.com
+DNS.10 = *.ytimg.com
+DNS.11 = *.ggpht.com
+DNS.12 = *.googleusercontent.com

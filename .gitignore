@@ -1,0 +1,15 @@
+# this directory is a scratch workspace; only the two packages below are tracked
+/*
+!/.gitignore
+!/.gitattributes
+!/LICENSE
+!/README.md
+!/tizenroot/
+!/ytadpatch/
+
+# per-installation keys and everything derived from them - never commit
+/ytadpatch/certs/ca.key
+/ytadpatch/certs/ca.srl
+/ytadpatch/certs/leaf.csr
+/ytadpatch/tv/tls/*
+/ytadpatch/tv/xwalk_cert/

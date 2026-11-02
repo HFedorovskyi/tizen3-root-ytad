@@ -1,0 +1,3 @@
+# the device runs /bin/sh on these files; a CR in a line makes it fail there
+* text=auto eol=lf
+*.png binary

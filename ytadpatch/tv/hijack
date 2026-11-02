@@ -1,0 +1,6 @@
+# host <ip> - answers from dnsd.js (suffix match, covers *.host).
+# 0.0.0.0 is loopback, where srv.js listens on 443.
+www.youtube.com 0.0.0.0
+youtubei.googleapis.com 0.0.0.0
+c.youtube.com 0.0.0.0
+redirector.googlevideo.com 0.0.0.0

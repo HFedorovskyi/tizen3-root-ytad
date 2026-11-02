@@ -1,0 +1,45 @@
+127.0.0.1	localhost.localdomain localhost
+::1	localhost6.localdomain6 localhost6
+# --- youtube pin: resolved from /etc/hosts even before dnsd is up, 0.0.0.0 == loopback ---
+0.0.0.0 www.youtube.com
+0.0.0.0 youtubei.googleapis.com
+0.0.0.0 c.youtube.com
+0.0.0.0 redirector.googlevideo.com
+# --- telemetry sinkhole ---
+0.0.0.0 osb.samsungqbe.com
+0.0.0.0 osbstg.samsungqbe.com
+0.0.0.0 osb-apps.samsungqbe.com
+0.0.0.0 osbstg-apps.samsungqbe.com
+0.0.0.0 osb-v1.samsungqbe.com
+0.0.0.0 lcprd1.samsungcloudsolution.net
+0.0.0.0 lcstg1.samsungcloudsolution.net
+0.0.0.0 acr0.samsungcloudsolution.com
+0.0.0.0 acr0.samsungcloudsolution.net
+0.0.0.0 samsungacr.com
+0.0.0.0 log-config.samsungacr.com
+0.0.0.0 log-config-dev.samsungacr.com
+0.0.0.0 acr-us-stg.internetat.tv
+0.0.0.0 dpu.samsungelectronics.com
+0.0.0.0 kpu.samsungelectronics.com
+0.0.0.0 upu.samsungelectronics.com
+0.0.0.0 xpu.samsungelectronics.com
+0.0.0.0 ypu.samsungelectronics.com
+0.0.0.0 zpu.samsungelectronics.com
+0.0.0.0 www.samsungrm.net
+0.0.0.0 test.samsungrm.net
+0.0.0.0 rmdev.samsungcloudsolution.net
+# --- ad sdk / measurement ---
+0.0.0.0 tvx.adgrx.com
+0.0.0.0 cdn-stv.adgrx.com
+0.0.0.0 adgrx.com
+0.0.0.0 samsungads.adsmeasurement.com
+0.0.0.0 static.doubleclick.net
+0.0.0.0 qoe.samsungcloud.tv
+0.0.0.0 nrdp.logs.netflix.com
+# --- OTA / firmware update (comment out to allow updates again) ---
+0.0.0.0 samsungotn.net
+0.0.0.0 www.samsungotn.net
+0.0.0.0 otn1.samsungcloudcdn.com
+0.0.0.0 otnprd8.samsungcloudsolution.net
+0.0.0.0 otnprd9.samsungcloudsolution.net
+0.0.0.0 otnprd10.samsungcloudsolution.net

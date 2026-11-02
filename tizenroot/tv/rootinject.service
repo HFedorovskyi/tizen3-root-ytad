@@ -1,0 +1,12 @@
+[Unit]
+Description=root inject watchdog
+
+[Service]
+Type=simple
+ExecStart=/bin/sh -c "sh < @BASE@/rootinject.sh"
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=default.target
