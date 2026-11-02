@@ -1,88 +1,92 @@
 # tizenroot
 
-Root-инжектор для Samsung TV 2017 (Tizen 3.0). Даёт root-шелл, устойчивый к ребуту, и механизм хуков, на котором держится `../ytadpatch`.
+Root injector for Samsung 2017 TVs running Tizen 3.0. It gives a root shell that survives reboots and a hook mechanism, which [tizen3-ytad](https://github.com/HFedorovskyi/tizen3-ytad) builds on.
 
-## Модель доступа
+Tested on `UE55MU6179` (`T-KTMDEUC`, Tizen 3.0). Other Tizen 3.0 models are likely to work the same way, but the D-Bus service and the shell quirks below are model-specific.
 
-| Канал | Кто | Что может |
+**Русская версия:** [README.ru.md](README.ru.md)
+
+## Access model
+
+| Channel | Who | What it can do |
 |---|---|---|
-| `appcmd:runapp:x; <cmd>` через sdb | `uid 5001 (owner)`, Smack `System` | файлы, чтение `/proc`, `systemctl --user`, запуск root-джоб |
-| `ExecuteUserShell` (D-Bus, jpmsd) | `uid 0`, Smack `System` | всё; **работает только из контекста `User`** (watchdog), из appcmd возвращает `0:-1:EMPTY:EMPTY` |
+| `appcmd:runapp:x; <cmd>` over sdb | `uid 5001 (owner)`, Smack `System` | files, `/proc`, `systemctl --user`, start root jobs |
+| `ExecuteUserShell` (D-Bus, jpmsd) | `uid 0`, Smack `System` | everything; **only works from the `User` context** (the watchdog); from appcmd it returns `0:-1:EMPTY:EMPTY` |
 
-Root-команды идут не напрямую, а джобами через живой `rootd`:
+Root commands never run directly — they go through the live `rootd` as jobs:
 
 ```sh
-node tizenroot.js job ./script.sh     # скрипт исполняется как uid 0
-node tizenroot.js sh 'id'             # uid 5001, для файловых операций
+node tizenroot.js job ./script.sh     # runs as uid 0
+node tizenroot.js sh 'id'             # uid 5001, for file operations
 ```
 
-Протокол джобы: содержимое пишется в `/tmp/root.cmd`, последняя строка `#END`; rootd переносит файл в `/tmp/root.job` и исполняет `sh < job`, вывод дописывается в `/tmp/root.out`.
+Job protocol: the script is uploaded to `/tmp/root.cmd` with `#END` as the last line; rootd renames it to `/tmp/root.job` and runs `sh < job`, output is appended to `/tmp/root.out`.
 
-## Установка
+## Install
 
 ```sh
 node tizenroot.js --serial 192.168.1.50:26101 install
 ```
 
-Что делает:
+What it does:
 
-1. заливает `rootd.sh` и `rootinject.sh` в `/opt/usr/home/owner/` (если старый файл принадлежит root — заменяет root-джобой, сверяя md5);
-2. кладёт `rootinject.service` в `/home/owner/.config/systemd/user/` и включает его в `default.target`;
-3. останавливает watchdog, убивает старый rootd его же джобой (`kill -9` + чистка pid-файла);
-4. `systemctl --user start rootinject.service`, ждёт новый pid, проверяет юнит.
+1. uploads `rootd.sh` and `rootinject.sh` into `/opt/usr/home/owner/` (a root-owned file left by a previous install is replaced through a root job after an md5 check);
+2. writes `rootinject.service` to `/home/owner/.config/systemd/user/` and enables it in `default.target`;
+3. stops the watchdog and kills the old rootd with its own job (`kill -9` plus pid cleanup);
+4. `systemctl --user start rootinject.service`, waits for the new pid and checks the unit.
 
-Watchdog:
+The watchdog:
 
-- при старте, если pid-файла нет — инжект сразу (окно после ребута ~1–3 с);
-- раз в 10 с: pid мёртв → инжект; heartbeat не менялся 35 с → инжект;
-- инжект с проверкой: успех только если `/tmp/rootd.pid` указывает на живой процесс.
+- on start, if there is no pid file, it injects immediately (about 1–3 s after boot);
+- every 10 s: pid dead → inject; heartbeat unchanged for 35 s → inject;
+- an injection only counts as successful when `/tmp/rootd.pid` points to a live process.
 
-Heartbeat `$(BASE)/rootd.beat` создаёт сам watchdog (метка Smack `User`), rootd только перезаписывает inode.
+The heartbeat file `$BASE/rootd.beat` is created by the watchdog itself (Smack label `User`); rootd only rewrites the existing inode.
 
-## Хуки
+## Hooks
 
-`$BASE/hooks/*.sh` исполняются rootd при каждом старте, по одному, в фоне, вывод в `/tmp/hooks.log`:
+`$BASE/hooks/*.sh` run as root every time rootd starts, one by one, in the background, with output in `/tmp/hooks.log`:
 
 ```sh
 ( for h in "$BASE"/hooks/*.sh; do [ -f "$h" ] && sh < "$h"; done ) >> /tmp/hooks.log 2>&1 &
 ```
 
-`sh < "$h"`, а не `sh "$h"`: на этой прошивке запуск скрипта путём под `$BASE` аргументом вешает шелл. Установить и сразу прогнать хук:
+`sh < "$h"` and not `sh "$h"`: on this firmware running a script located under `$BASE` as an argument hangs the shell forever. Install a hook and run it right away:
 
 ```sh
 node tizenroot.js hook ./myhook.sh myhook
 ```
 
-## Команды
+## Commands
 
 ```
-probe                 кто мы и uptime
-sh <cmd>              команда как owner
-job <file>            скрипт как root (таймаут по умолчанию 60 с)
-push <local> <remote> [mode]   base64-транспорт (sdb push на retail не работает)
+probe                 who we are and uptime
+sh <cmd>              run a command as owner
+job <file>            run a script as root (60 s timeout by default)
+push <local> <remote> [mode]   base64 transport (sdb push does not work on retail)
 pull <remote> <local> [chunk]
-hook <file> [name]    установить хук и выполнить сейчас
+hook <file> [name]    install a hook and run it now
 install / uninstall / status
 ```
 
-Опции: `--serial`, `--sdb PATH`, `--port`, `--timeout`.
+Options: `--serial`, `--sdb PATH`, `--port`, `--timeout`.
 
-## Файлы на ТВ
+## Files on the TV
 
 ```
-/opt/usr/home/owner/rootd.sh          джоб-раннер
+/opt/usr/home/owner/rootd.sh          job runner
 /opt/usr/home/owner/rootinject.sh     watchdog
-/opt/usr/home/owner/rootinject.pid    pid watchdog (пишет сам скрипт)
+/opt/usr/home/owner/rootinject.pid    watchdog pid (written by the script itself)
 /opt/usr/home/owner/rootd.beat        heartbeat
-/opt/usr/home/owner/hooks/            boot-хуки
-/tmp/root.cmd /tmp/root.job           очередь джоб
-/tmp/root.out /tmp/hooks.log          вывод
+/opt/usr/home/owner/hooks/            boot hooks
+/tmp/root.cmd /tmp/root.job           job queue
+/tmp/root.out /tmp/hooks.log          output
 ```
 
-Юнит: `/home/owner/.config/systemd/user/rootinject.service`
+Unit: `/home/owner/.config/systemd/user/rootinject.service`
 (`ExecStart=/bin/sh -c "sh < /opt/usr/home/owner/rootinject.sh"`, `Restart=always`).
 
-## Отладка
+## Debugging
 
 ```sh
 node tizenroot.js status
@@ -90,13 +94,17 @@ node tizenroot.js sh 'tail -5 /opt/usr/home/owner/rootinject.log'
 node tizenroot.js sh 'systemctl --user status rootinject.service'
 ```
 
-- нет нового pid после `install` → `rootinject.log` (ошибка D-Bus), `systemctl --user status`;
-- юнит `active`, rootd мёртв → watchdog перезапустит за ≤10 с; руками: `systemctl --user restart rootinject.service`;
-- sdb перестал отвечать на всё → цикл питания, после загрузки цепочка поднимется сама.
+- no new pid after `install` → `rootinject.log` (D-Bus error), `systemctl --user status`;
+- unit `active` but rootd is dead → the watchdog restarts it within 10 s; manually: `systemctl --user restart rootinject.service`;
+- sdb stopped answering everything → power cycle; the chain comes back on its own.
 
-## Ограничения
+## Limits
 
-- `sh -n <file>` на устройстве зависает — синтаксис проверять локально.
-- Файлы, созданные root, из owner-шелла не переименовать; заменять root-джобой.
-- `appcmd` ограничен ~4096 байт на команду и иногда отдаёт пустой ответ — транспорт дробит файлы на чанки и ретраит.
-- Не трогать `kfactoryd SetData`, WAS-базу и `mount -o remount,rw /`.
+- `sh -n <file>` hangs on the device — check syntax locally.
+- A file created by root cannot be renamed from the owner shell; replace it with a root job.
+- `appcmd` is capped at ~4096 bytes per command and sometimes returns an empty answer — the transport chunks files and retries.
+- Do not touch `kfactoryd SetData`, the WAS database, or `mount -o remount,rw /`.
+
+## License
+
+MIT, see [LICENSE](LICENSE).

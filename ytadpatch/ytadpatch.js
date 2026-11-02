@@ -12,7 +12,7 @@
 // Nothing secret is distributed; after a fresh install the CA must be trusted by
 // the TV (CaBox imports $BASE/share/xwalk_cert/phantom_ca.pem).
 //
-// Requires tizenroot:  node ../tizenroot/tizenroot.js install
+// Requires the tizen3-root injector (node tizenroot.js install in that repo)
 //
 // Commands: install | start | uninstall [--purge] | status | logs [n]
 
@@ -21,12 +21,29 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const TR_PATH = process.env.TIZENROOT || path.join(__dirname, '..', 'tizenroot', 'tizenroot.js');
-let tr;
-try { tr = require(TR_PATH); } catch (e) {
-  console.error('error: tizenroot not found at ' + TR_PATH + ' (set TIZENROOT)');
+// tizenroot is a separate repo: a sibling clone of tizen3-root, or the package
+// directory when both live in one tree. TIZENROOT overrides everything.
+function findTizenroot() {
+  const cands = [
+    process.env.TIZENROOT,
+    path.join(__dirname, '..', 'tizenroot', 'tizenroot.js'),
+    path.join(__dirname, '..', 'tizen3-root', 'tizenroot.js'),
+    path.join(__dirname, 'tizenroot', 'tizenroot.js'),
+  ].filter(Boolean);
+  for (const c of cands) {
+    try { require.resolve(c); return c; } catch (e) { /* next */ }
+  }
+  return null;
+}
+
+const TR_PATH = findTizenroot();
+if (!TR_PATH) {
+  console.error('error: tizenroot not found. Clone it next to this repo:\n' +
+    '  git clone https://github.com/HFedorovskyi/tizen3-root.git\n' +
+    'or point TIZENROOT at tizenroot.js');
   process.exit(1);
 }
+const tr = require(TR_PATH);
 
 const BASE = tr.BASE;
 const Y = BASE + '/ytad';
@@ -76,7 +93,7 @@ async function rootdAlive() {
 
 async function install() {
   await tr.ensureDevice();
-  if (!(await rootdAlive())) die('rootd is not running - install the injector first: node ../tizenroot/tizenroot.js install');
+  if (!(await rootdAlive())) die('rootd is not running - install the tizen3-root injector first');
   ensureCerts();
 
   const mk = await sh(`mkdir -p ${Y}/tls ${BASE}/hooks`);
@@ -201,7 +218,7 @@ async function logs(n) {
 
 async function start() {
   await tr.ensureDevice();
-  if (!(await rootdAlive())) die('rootd is not running - install the injector first: node ../tizenroot/tizenroot.js install');
+  if (!(await rootdAlive())) die('rootd is not running - install the tizen3-root injector first');
   const out = await tr.job(`sh < ${HOOK}\necho hook-done`, 120000);
   console.log(out.trim().split('\n').slice(-3).join('\n'));
 }
@@ -223,7 +240,7 @@ commands
   status             mounts, processes, rules, recent log lines
   logs [n]           tail of the proxy and hook logs
 
-requires the root injector: node ../tizenroot/tizenroot.js install`);
+requires the tizen3-root injector (node tizenroot.js install in that repo)`);
 }
 
 async function main() {

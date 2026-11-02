@@ -1,71 +1,91 @@
-# ytadpatch
+# tizen3-ytad
 
-Стоковый YouTube без рекламы на Samsung TV 2017 (Tizen 3.0). Локальный TLS-MITM: приложение думает, что говорит с YouTube, прокси вырезает рекламу из ответов.
+Ad-free stock YouTube on Samsung 2017 TVs (Tizen 3.0). A local TLS MITM: the app believes it is talking to YouTube while the proxy strips ads out of the responses. Nothing is installed over the stock app — no sideloaded widgets, no replacement client.
 
-Требует установленного `../tizenroot` (`node ../tizenroot/tizenroot.js install`).
+Requires the [tizen3-root](https://github.com/HFedorovskyi/tizen3-root) injector (package `tizenroot`).
 
-## Что происходит на ТВ
+**Русская версия:** [README.ru.md](README.ru.md)
 
-1. `/etc/hosts` (bind-mount из `$Y/hosts`) пиннит `www.youtube.com`, `youtubei.googleapis.com`, `c.youtube.com`, `redirector.googlevideo.com` в `0.0.0.0`, то есть в loopback. Резолв работает даже раньше DNS-прокси.
-2. `dnsd.js` слушает `127.0.0.1:53`; `iptables -t nat` перенаправляет на него UDP/53 к шлюзу. Он же отдаёт sinkhole-адреса для телеметрии Samsung и OTA (список в `tv/hosts`).
-3. `srv.js` слушает `127.0.0.1:443`, принимает TLS с листом, подписанным локальным CA, и проксирует к настоящему Google по DoH. В ответах:
-   - из JSON вырезаются `adPlacements`, `playerAds`, `adSlots`, `adSlotRenderer`, `promoted*` и т.п.;
-   - запрос `/youtubei/v1/player` переписывается на WEB-клиент (без `authorization`), потому что TVHTML5 отдаёт рекламу через SSDAI прямо в стрим;
-   - `onesie /initplayback` отвечает 503, чтобы плеер вернулся к обычному player-запросу;
-   - `alt-svc` вырезается, UDP/443 и UDP/80 дропаются — иначе Chromium переходит на HTTP/3 в обход прокси.
-4. `10-ytad.sh` (boot-хук из `tizenroot`) делает bind-монтирования, поднимает оба демона, ставит DNAT/DROP и перезапускает YouTube, если тот стартовал до готовности стека.
+## What happens on the TV
 
-## Установка
+1. `/etc/hosts` (a bind mount of `$Y/hosts`) pins `www.youtube.com`, `youtubei.googleapis.com`, `c.youtube.com` and `redirector.googlevideo.com` to `0.0.0.0`, which is loopback. Resolution works even before the DNS proxy is up.
+2. `dnsd.js` listens on `127.0.0.1:53`; `iptables -t nat` redirects the gateway's UDP/53 to it. The same service answers with sinkhole addresses for Samsung telemetry and OTA hosts (list in `tv/hosts`).
+3. `srv.js` listens on `127.0.0.1:443`, terminates TLS with a leaf signed by a local CA and proxies to the real Google backend over DoH. In responses:
+   - `adPlacements`, `playerAds`, `adSlots`, `adSlotRenderer`, `promoted*` and friends are removed from JSON;
+   - the `/youtubei/v1/player` request is rewritten to the WEB client (without `authorization`), because TVHTML5 delivers ads through SSDAI straight inside the stream;
+   - `onesie /initplayback` answers 503 so the player falls back to a regular player call;
+   - `alt-svc` is stripped and UDP/443 + UDP/80 are dropped, otherwise Chromium switches to HTTP/3 and bypasses the proxy.
+4. `10-ytad.sh` (a boot hook from tizenroot) sets up the bind mounts, starts both daemons, installs the DNAT/DROP rules and restarts YouTube if it started before the stack was ready.
+
+## Install
+
+Clone both repositories side by side — the patcher looks for `../tizen3-root/tizenroot.js`:
 
 ```sh
-node ytadpatch.js --serial 192.168.1.50:26101 install
+git clone https://github.com/HFedorovskyi/tizen3-root.git
+git clone https://github.com/HFedorovskyi/tizen3-ytad.git
 ```
 
-1. Если в `tv/tls/` нет пары — генерирует CA и лист (`certs/make_certs.sh`, нужен openssl).
-2. Заливает стек в `/opt/usr/home/owner/ytad/` и хук в `/opt/usr/home/owner/hooks/10-ytad.sh` (md5-скип: неизменившееся не пересылается).
-3. Собирает на ТВ три trust-бандла из **штатных** файлов Samsung + ваш CA (`/usr/share/cert/{webapp,ca,webbrowser}.pem`); если наш бандл уже смонтирован, делает `umount`, чтобы увидеть оригинал, и защищается от самодописывания проверкой inode.
-4. Кладёт CA в `$BASE/share/xwalk_cert/phantom_ca.pem` — оттуда его импортирует CaBox.
-5. Гасит старый стек, запускает хук.
-
-## Доверие сертификату
-
-CA уникален для установки. После первого запуска:
-
-- CaBox обычно импортирует `phantom_ca.pem` сам;
-- если приложение отвечает `alert 48 unknown_ca` — открыть CaBox и импортировать этот файл, затем перезапустить YouTube (`node ../tizenroot/tizenroot.js sh 'kill -9 <pid>'` + `app_launcher -s`, либо просто ребут);
-- сменили CA (`certs/make_certs.sh` вручную) — старый импорт больше не действует, повторить импорт.
-
-`certs/ca.key` — приватный ключ: он подписывает лист, которому доверяет ТВ. В git его нет и быть не должно.
-
-## Проверка
+Install the injector first, then the patch:
 
 ```sh
-node ytadpatch.js status      # монтирования, процессы, iptables, флаги, хвост логов
+node tizen3-root/tizenroot.js --serial 192.168.1.50:26101 install
+node tizen3-ytad/ytadpatch.js --serial 192.168.1.50:26101 install
+```
+
+`TIZENROOT=/path/to/tizenroot.js` overrides the lookup if the checkouts live elsewhere.
+
+What `ytadpatch install` does:
+
+1. if `tv/tls/` has no key pair, generates a CA and a leaf (`certs/make_certs.sh`, needs openssl);
+2. uploads the stack to `/opt/usr/home/owner/ytad/` and the hook to `/opt/usr/home/owner/hooks/10-ytad.sh` (md5 skip: unchanged files are not transferred);
+3. builds three trust bundles on the TV from the **stock** Samsung files plus your CA (`/usr/share/cert/{webapp,ca,webbrowser}.pem`); if our bundle is already mounted it unmounts first to see the original, and guards against appending the CA twice by comparing inodes;
+4. copies the CA to `$BASE/share/xwalk_cert/phantom_ca.pem`, where CaBox picks it up;
+5. stops the old stack and runs the hook.
+
+## Certificate trust
+
+The CA is unique to each installation; the repository ships no keys, and the trust bundles are derived on the TV. After the first run:
+
+- CaBox usually imports `phantom_ca.pem` on its own;
+- if the app answers `alert 48 unknown_ca`, open CaBox, import that file, then restart YouTube (`kill -9 <pid>` plus `app_launcher -s`, or simply reboot);
+- if you regenerate the CA (`certs/make_certs.sh`), the old import stops working — import again.
+
+`certs/ca.key` is the private key that signs the leaf your TV trusts. It is not in git and must never be.
+
+## Verify
+
+```sh
+node ytadpatch.js status      # mounts, processes, iptables, flags, log tail
 node ytadpatch.js logs 40
 ```
 
-Признаки нормы:
+Signs of a healthy setup:
 
 - `/tmp/tlssrv.log`: `TLS_OK sni=www.youtube.com`, `POST /youtubei/v1/player … adrm=4`;
-- нет строк `/api/stats?…el=adunit` (счётчик `grep -c adunit` = 0);
+- no `/api/stats?…el=adunit` lines (`grep -c adunit` returns 0);
 - `watchtime … state=playing`;
-- `grep 0100007F:01BB /proc/net/tcp` — прокси слушает.
+- `grep 0100007F:01BB /proc/net/tcp` — the proxy is listening.
 
-## Диагностика
+## Troubleshooting
 
-| Симптом | Причина / что смотреть |
+| Symptom | Cause / what to check |
 |---|---|
-| Чёрный экран или вылет YouTube после ребута | `srv.js` не запущен, а имя уже пиннится в loopback. Проверить `ps -ef | grep srv.js`, `tail /tmp/tlssrv.err`, наличие `$Y/srv.js` (не `$Y/tls/srv.js`) |
-| Реклама вернулась | приложение ушло в HTTP/3: нет ли `alt-svc` в ответах, стоит ли DROP UDP/443; либо player-запрос прошёл мимо прокси — искать `/youtubei/v1/player` в логе |
-| `alert 48 unknown_ca` | CA не в trust store ТВ: импорт через CaBox (см. выше) |
-| Бесконечная загрузка после смены конфигурации | живой экземпляр держит старые сокеты: `kill -9` приложения и запустить заново (`app_launcher -s`) |
-| Нет звука/картинки, но трафик идёт | player-ответ получен с TVHTML5/SSDAI: проверить, что rewrite на WEB сработал (`adrm` > 0) |
+| Black screen or YouTube crash after reboot | `srv.js` is not running while the hostname already points to loopback. Check `ps -ef \| grep srv.js`, `tail /tmp/tlssrv.err`, and that `$Y/srv.js` exists (not `$Y/tls/srv.js`) |
+| Ads are back | the app switched to HTTP/3: check that `alt-svc` is absent and the UDP/443 DROP rule exists; or the player call bypassed the proxy — look for `/youtubei/v1/player` in the log |
+| `alert 48 unknown_ca` | the CA is not in the TV trust store: import through CaBox (see above) |
+| Endless loading after a config change | the live instance holds stale sockets: `kill -9` the app and launch it again (`app_launcher -s`) |
+| No sound or picture, but traffic flows | the player response came from TVHTML5/SSDAI: verify the WEB rewrite fired (`adrm` > 0) |
 
-## Удаление
+## Uninstall
 
 ```sh
-node ytadpatch.js uninstall          # снять стек, монтирования, правила, хук
-node ytadpatch.js uninstall --purge  # плюс удалить /opt/usr/home/owner/ytad
+node ytadpatch.js uninstall          # stack, mounts, iptables rules, hook
+node ytadpatch.js uninstall --purge  # also removes /opt/usr/home/owner/ytad
 ```
 
-Удаление не откатывает trust: импортированный CA остаётся в хранилище ТВ, пока его не убрать через CaBox.
+Removing does not undo trust: the imported CA stays in the TV store until you delete it in CaBox.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
