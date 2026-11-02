@@ -43,7 +43,12 @@ function ensureCerts() {
   const have = ['ca.pem', 'leaf.pem', 'leaf.key'].every((f) => fs.existsSync(path.join(TLS, f)));
   if (have) return;
   console.log('no local certs: generating a CA and a leaf (certs/make_certs.sh)');
-  const r = spawnSync('sh', [path.join(__dirname, 'certs', 'make_certs.sh')], { stdio: 'inherit' });
+  // Git Bash's sh gets the path as an argument, so Windows separators must go
+  const gen = path.join(__dirname, 'certs', 'make_certs.sh').replace(/\\/g, '/');
+  // MSYS (Git Bash) rewrites arguments that start with "/" into Windows paths:
+  // openssl's -subj "/O=.../CN=..." would arrive as "C:/Program Files/Git/O=...".
+  const env = Object.assign({}, process.env, { MSYS_NO_PATHCONV: '1' });
+  const r = spawnSync('sh', [gen], { stdio: 'inherit', env });
   if (r.status !== 0) die('certificate generation failed (openssl required in PATH)');
 }
 
